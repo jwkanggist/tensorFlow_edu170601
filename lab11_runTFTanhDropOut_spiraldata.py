@@ -74,23 +74,24 @@ plt.legend()
 
 
 # configure training parameters =====================================
-learning_rate = 0.010
-training_epochs = 1000
+learning_rate = 0.01
+training_epochs = 500
 batch_size = 50
 display_step = 1
 
 
 # computational TF graph construction ================================
 # Network Parameters
-n_hidden_1 = 10 # 1st layer number of neurons
-n_hidden_2 = 8 # 2nd layer number of neurons
-n_hidden_3 = 4 # 3rd layer number of neurons
+n_hidden_1 = 20 # 1st layer number of neurons
+n_hidden_2 = 16 # 2nd layer number of neurons
+n_hidden_3 = 8 # 3rd layer number of neurons
 num_input = xsize   # two-dimensional input X = [x1 x2]
 num_classes = ysize # 2 class
 
 # tf Graph input
 X = tf.placeholder(tf.float32, [None, num_input])
 Y = tf.placeholder(tf.float32, [None, num_classes])
+drop_prob= tf.placeholder(tf.float32)
 
 # Store layers weight & bias
 weights = {
@@ -111,17 +112,20 @@ def neural_net(x):
     # Hidden fully connected layer with 7 neurons
     layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
     layer_1 = tf.nn.tanh(layer_1)
+    drop_out1= tf.layers.dropout(layer_1,drop_prob)
 
     # Hidden fully connected layer with 7 neurons
-    layer_2 = tf.add(tf.matmul(layer_1, weights['h2']), biases['b2'])
+    layer_2 = tf.add(tf.matmul(drop_out1, weights['h2']), biases['b2'])
     layer_2 = tf.nn.tanh(layer_2)
+    drop_out2 = tf.layers.dropout(layer_2, drop_prob)
 
     # Hidden fully connected layer with 4 neurons
-    layer_3 = tf.add(tf.matmul(layer_2, weights['h3']), biases['b3'])
+    layer_3 = tf.add(tf.matmul(drop_out2, weights['h3']), biases['b3'])
     layer_3 = tf.nn.tanh(layer_3)
+    drop_out3 = tf.layers.dropout(layer_3, drop_prob)
 
     # Output fully connected layer with a neuron for each class
-    out_layer = tf.matmul(layer_3, weights['out']) + biases['out']
+    out_layer = tf.matmul(drop_out3, weights['out']) + biases['out']
     return out_layer
 
 # Construct model
@@ -129,7 +133,7 @@ def neural_net(x):
 
 #with graph0.as_default():
 logits = neural_net(X)
-prediction = tf.nn.tanh(logits)
+prediction = tf.nn.softmax(logits)
 
 # Define loss and optimizer
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=Y))
@@ -165,7 +169,7 @@ with tf.Session() as sess:
         total_batch = int(training_size/batch_size)
         # recording with tensorboard
         # 1) accuracy visualization
-        summary_str = loss_summary.eval(feed_dict={X: x_training_data, Y: t_training_data})
+        summary_str = loss_summary.eval(feed_dict={X: x_training_data, Y: t_training_data, drop_prob: 0})
         file_writer.add_summary(summary_str,epoch)
 
         for i in range(total_batch):
@@ -179,7 +183,7 @@ with tf.Session() as sess:
             # Run optimization op (backprop) and cost op (to get loss value)
             # feedign training data
             _, local_batch_cost = sess.run([optimizer,cost], feed_dict={X: batch_xs,
-                                                          Y: batch_ts})
+                                                          Y: batch_ts, drop_prob: 0.2})
 
             # Compute average loss
             avg_cost += local_batch_cost / total_batch
@@ -196,10 +200,10 @@ with tf.Session() as sess:
             batch_valid_ys = t_validation_data
 
             errRateTraining[epoch] = 1.0 - accuracy.eval({X: batch_train_xs, \
-                                                          Y: batch_train_ys}, session=sess)
+                                                          Y: batch_train_ys, drop_prob: 0}, session=sess)
 
             errRateValidation[epoch] = 1.0 - accuracy.eval({X: batch_valid_xs, \
-                                                            Y: batch_valid_ys}, session=sess)
+                                                            Y: batch_valid_ys, drop_prob: 0}, session=sess)
 
             print("Training set Err rate: %s"   % errRateTraining[epoch])
             print("Validation set Err rate: %s" % errRateValidation[epoch])
@@ -211,13 +215,13 @@ with tf.Session() as sess:
     # Calculate accuracy for test images
     ##-------------------------------------------
     # # training Result display
-    print("Validation set Err rate:", accuracy.eval({X: x_validation_data, Y: t_validation_data},session=sess)/validation_size)
+    print("Validation set Err rate:", accuracy.eval({X: x_validation_data, Y: t_validation_data, drop_prob: 0},session=sess)/validation_size)
 
 
 hfig2 = plt.figure(2,figsize=(10,10))
 epoch_index = np.array([elem for elem in range(training_epochs)])
-plt.plot(epoch_index,errRateTraining,label='Training data',color='r',marker='o')
-plt.plot(epoch_index,errRateValidation,label='Validation data',color='b',marker='x')
+plt.semilogy(epoch_index,errRateTraining,label='Training data',color='r',marker='o')
+plt.semilogy(epoch_index,errRateValidation,label='Validation data',color='b',marker='x')
 
 plt.legend()
 plt.title('Classification Error Rate of prediction:')
