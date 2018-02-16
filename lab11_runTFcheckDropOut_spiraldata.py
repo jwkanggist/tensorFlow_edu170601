@@ -56,25 +56,19 @@ t_training_data = t_data[0:training_size,:]
 x_validation_data = x_data[training_size:-1,:]
 t_validation_data = t_data[training_size:-1,:]
 
-# #data plot
-# hfig1= plt.figure(1,figsize=[10,10])
-# plt.scatter(data.xdata1.values[0:int(data.xdata1.size/2)],\
-#             data.xdata2.values[0:int(data.xdata1.size/2)], \
-#             color='b',label='class0')
-# plt.scatter(data.xdata1.values[int(data.xdata1.size/2)+2:-1],\
-#             data.xdata2.values[int(data.xdata1.size/2)+2:-1], \
-#             color='r',label='class1')
-# plt.title('Two Spiral data Example')
-# plt.legend()
 
 
 # configure training parameters =====================================
 learning_rate = 0.005
+
 training_epochs = 5000
 batch_size = 500
 display_step = 100
 total_batch = int(training_size / batch_size)
-dropout_rate = 0.8
+
+# dropout_rate = 1 --> no dropout
+# dropout_rate = 1 --> no nodes to work
+dropoutrate_in_training = 0.8
 
 # computational TF graph construction ================================
 # Network Parameters
@@ -89,8 +83,12 @@ num_input = xsize   # two-dimensional input X = [x1 x2]
 num_classes = ysize # 2 class
 
 # tf Graph input
-X = tf.placeholder(tf.float32, [None, num_input])
-Y = tf.placeholder(tf.float32, [None, num_classes])
+X           = tf.placeholder(tf.float32, [None, num_input])
+Y           = tf.placeholder(tf.float32, [None, num_classes])
+
+# droprate must be given by placeholder 
+# since the network in validation do not require dropout nodes in layers.
+dropoutrate_io   = tf.placeholder(tf.float32)
 
 # Store layers weight & bias
 weights = {
@@ -115,29 +113,29 @@ def neural_net(x):
     # Input fully connected layer with 10 neurons
     layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
     layer_1 = tf.nn.relu(layer_1)
-    layer_1 = tf.layers.dropout(inputs=layer_1,rate=dropout_rate)
+    layer_1 = tf.layers.dropout(inputs=layer_1,rate=dropoutrate_in_training)
 
 
     # Hidden fully connected layer with 7 neurons
     layer_2 = tf.add(tf.matmul(layer_1, weights['h2']), biases['b2'])
     layer_2 = tf.nn.relu(layer_2)
-    layer_2 = tf.layers.dropout(inputs=layer_2,rate=  dropout_rate)
+    layer_2 = tf.layers.dropout(inputs=layer_2,rate=  dropoutrate_in_training)
 
 
     # Hidden fully connected layer with 7 neurons
     layer_3 = tf.add(tf.matmul(layer_2, weights['h3']), biases['b3'])
     layer_3 = tf.nn.relu(layer_3)
-    layer_3 = tf.layers.dropout(inputs=layer_3,rate= dropout_rate)
+    layer_3 = tf.layers.dropout(inputs=layer_3,rate= dropoutrate_in_training)
 
     # Hidden fully connected layer with 4 neurons
     layer_4 = tf.add(tf.matmul(layer_3, weights['h4']), biases['b4'])
     layer_4 = tf.nn.relu(layer_4)
-    layer_4 = tf.layers.dropout(inputs=layer_4,rate = dropout_rate)
+    layer_4 = tf.layers.dropout(inputs=layer_4,rate = dropoutrate_in_training)
 
     # Hidden fully connected layer with 4 neurons
     layer_5 = tf.add(tf.matmul(layer_4, weights['h5']), biases['b5'])
     layer_5 = tf.nn.relu(layer_5)
-    layer_5 = tf.layers.dropout(inputs=layer_5, rate=dropout_rate)
+    layer_5 = tf.layers.dropout(inputs=layer_5, rate=dropoutrate_in_training)
 
     # Output fully connected layer with a neuron for each class
     out_layer = tf.matmul(layer_5, weights['out']) + biases['out']
@@ -158,8 +156,8 @@ optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minim
 correct_pred = tf.equal(tf.argmax(prediction, 1), tf.argmax(Y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-errRateTraining     = np.zeros(training_epochs)
-errRateValidation   = np.zeros(training_epochs)
+errRatebyTrainingSet     = np.zeros(training_epochs)
+errRatebyValidationSet   = np.zeros(training_epochs)
 
 # Initialize the variables (i.e. assign their default value)
 init = tf.global_variables_initializer()
@@ -209,15 +207,15 @@ with tf.Session() as sess:
             if epoch == training_epochs - 1:
                 # print ('Gradient calculation to see gradient vanishing problem')
                 _, grad_wrt_weight_layer1 = sess.run([optimizer,grad_wrt_weight_layer1_tensor], feed_dict={X: batch_xs,
-                                                          Y: batch_ts})
+                                                          Y: batch_ts, dropoutrate_io: dropoutrate_in_training})
                 _, grad_wrt_weight_layer2 = sess.run([optimizer,grad_wrt_weight_layer2_tensor], feed_dict={X: batch_xs,
-                                                          Y: batch_ts})
+                                                          Y: batch_ts, dropoutrate_io: dropoutrate_in_training})
                 _, grad_wrt_weight_layer3 = sess.run([optimizer,grad_wrt_weight_layer3_tensor], feed_dict={X: batch_xs,
-                                                          Y: batch_ts})
+                                                          Y: batch_ts, dropoutrate_io: dropoutrate_in_training})
                 _, grad_wrt_weight_layer4 = sess.run([optimizer,grad_wrt_weight_layer4_tensor], feed_dict={X: batch_xs,
-                                                          Y: batch_ts})
+                                                          Y: batch_ts, dropoutrate_io: dropoutrate_in_training})
                 _, grad_wrt_weight_layer5 = sess.run([optimizer,grad_wrt_weight_layer5_tensor], feed_dict={X: batch_xs,
-                                                          Y: batch_ts})
+                                                          Y: batch_ts, dropoutrate_io: dropoutrate_in_training})
                 grad_wrt_weight_layer1 = np.array(grad_wrt_weight_layer1)
                 grad_wrt_weight_layer2 = np.array(grad_wrt_weight_layer2)
                 grad_wrt_weight_layer3 = np.array(grad_wrt_weight_layer3)
@@ -258,20 +256,31 @@ with tf.Session() as sess:
             batch_valid_xs = x_validation_data
             batch_valid_ys = t_validation_data
 
-            errRateTraining[epoch] = 1.0 - accuracy.eval({X: batch_train_xs, \
-                                                          Y: batch_train_ys}, session=sess)
+            # for error rate evaluation, the dropout rate must be 1.0
+            errRatebyTrainingSet[epoch] = 1.0 - accuracy.eval({X: batch_train_xs, \
+                                                          Y: batch_train_ys, dropoutrate_io: 1.0}, session=sess)
 
-            errRateValidation[epoch] = 1.0 - accuracy.eval({X: batch_valid_xs, \
-                                                            Y: batch_valid_ys}, session=sess)
+            errRatebyValidationSet[epoch] = 1.0 - accuracy.eval({X: batch_valid_xs, \
+                                                            Y: batch_valid_ys, dropoutrate_io: 1.0}, session=sess)
 
-            print("Training set Err rate: %s"   % errRateTraining[epoch])
-            print("Validation set Err rate: %s" % errRateValidation[epoch])
+            print("Training set Err rate: %s"   % errRatebyTrainingSet[epoch])
+            print("Validation set Err rate: %s" % errRatebyValidationSet[epoch])
             print("--------------------------------------------")
 
     print("Optimization Finished!")
 
     # Calculate accuracy for test images
     ##-------------------------------------------
+#data plot
+hfig1= plt.figure(1,figsize=[10,10])
+plt.scatter(data.xdata1.values[0:int(data.xdata1.size/2)],\
+            data.xdata2.values[0:int(data.xdata1.size/2)], \
+            color='b',label='class0')
+plt.scatter(data.xdata1.values[int(data.xdata1.size/2)+2:-1],\
+            data.xdata2.values[int(data.xdata1.size/2)+2:-1], \
+            color='r',label='class1')
+plt.title('Two Spiral data Example')
+plt.legend()
 
 
 hfig2 = plt.figure(2,figsize=(10,10))
@@ -280,16 +289,16 @@ plt.plot(batch_index,grad_wrt_weight_layer1_iter,label='layer1',color='b',marker
 plt.plot(batch_index,grad_wrt_weight_layer4_iter,label='layer4',color='y',marker='o')
 plt.plot(batch_index,grad_wrt_weight_layer5_iter,label='layer5',color='r',marker='o')
 plt.legend()
-plt.title('Dropout = (%s), Weight Gradient over minibatch iter' % dropout_rate)
+plt.title('Dropout = (%s), Weight Gradient over minibatch iter' % dropoutrate_in_training)
 plt.xlabel('minibatch iter')
 plt.ylabel('Weight Gradient')
 
 hfig3 = plt.figure(3,figsize=(10,10))
 epoch_index = np.array([elem for elem in range(training_epochs)])
-plt.plot(epoch_index,errRateTraining,label='Training data',color='r',marker='o')
-plt.plot(epoch_index,errRateValidation,label='Validation data',color='b',marker='x')
+plt.plot(epoch_index,errRatebyTrainingSet,label='Training data',color='r',marker='o')
+plt.plot(epoch_index,errRatebyValidationSet,label='Validation data',color='b',marker='x')
 plt.legend()
-plt.title('Dropout = (%s), Train/Valid Err' % dropout_rate)
+plt.title('Dropout = (%s), Train/Valid Err' % dropoutrate_in_training)
 plt.xlabel('Iteration epoch')
 plt.ylabel('error Rate')
 
